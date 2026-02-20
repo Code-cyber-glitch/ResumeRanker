@@ -1,163 +1,225 @@
 import os
+import re
+import csv
+import tkinter as tk
+from tkinter import messagebox, filedialog, ttk
 import PyPDF2
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import csv
-import re
-from sklearn.feature_extraction import text as sklearn_text
-import tkinter as tk
-from tkinter import messagebox
-from tkinter import filedialog
-from tkinter import ttk
+from sklearn.metrics import classification_report
 
-BOOST_KEYWORDS = ['python','machine learning','django','rest api','tensorflow','flask']
-selected_folder_path = r"C:\Projects\ResumeRanker\resumes"
-selected_jd_path = r"C:\Projects\ResumeRanker\job_description.txt"
+# ================= SETTINGS ================= #
+
+BOOST_KEYWORDS = [
+    'python','machine learning','deep learning','nlp','tensorflow',
+    'pandas','numpy','sql','data analysis','flask','django'
+]
+
+MIN_WORDS = 50   # ignore resumes with too little text
+
+
+# ================= TEXT PROCESSING ================= #
 
 def read_job_description(path):
     with open(path, 'r', encoding='utf-8') as file:
         return file.read()
 
+
 def extract_text_from_pdf(pdf_path):
-    text = ''
-    with open(pdf_path, 'rb') as file:
-        reader = PyPDF2.PdfReader(file)
-        for page in reader.pages:
-            text += page.extract_text()
+    text = ""
+    try:
+        with open(pdf_path, 'rb') as file:
+            reader = PyPDF2.PdfReader(file)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + " "
+    except Exception as e:
+        print("PDF error:", e)
     return text
 
-def clean_text(text_data):
-    text_data = text_data.lower()
-    text_data = re.sub(r'[a-z\s]','',text_data)
-    return text_data
 
-def calculate_keyword_boost(text):
-    boost = 0
-    for keyword in BOOST_KEYWORDS:
-        if keyword in text:
-            boost += 0.05
-    return boost
+def clean_text(text):
+    text = text.lower()
+    text = re.sub(r'[^a-z\s]', ' ', text)   # keep letters only
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
-def update_button_state(start_button):
-    if selected_folder_path and selected_jd_path:
-        start_button.config(state="normal")
-    else:
-        start_button.config(state="disabled")
-        
-def display_ranked_resumes():
-        
-    def choose_resume_folder():
-        global selected_folder_path
-        selected_folder_path = filedialog.askdirectory(title="Select folder containing all Resumes")
-        if selected_folder_path:
-            print(f"Resumes will be loaded from: {selected_folder_path}")
 
-    def choose_jd_file():
-        global selected_jd_path
-        selected_jd_path = filedialog.askopenfilename(title="Select Job Description Text file", filetypes=[("Text files", ".txt")])
-        if selected_jd_path:
-            progress_label.config(text=f"Job decription loaded: {os.path.basename(selected_jd_path)}")
+def keyword_boost(text):
+    score = 0
+    matched = []
+    for k in BOOST_KEYWORDS:
+        if k in text:
+            score += 0.03
+            matched.append(k)
+    return score, matched
 
-    def start_program():
-        if not selected_folder_path:
-            messagebox.showwarning("No folder", "Please select a resume folder first!")
-            return
-        try:
-            if not selected_jd_path:
-                messagebox.showwarning("NO JD", "Please select a Job Description file first!")
-                return
-            job_description = read_job_description(selected_jd_path)
-        except FileNotFoundError:
-            messagebox.showerror("Error",f"Job description file '{JD_FILE}' not found")
-            return
-        except Exception as e:
-            messagebox.showerror("Error", f"An error ocurred while reading the job description: {str(e)}")
-            return
-            
-        resumes_text = {}
-        for filename in os.listdir(selected_folder_path):
-            if filename.endswith('.pdf'):
-                path = os.path.join(selected_folder_path, filename)
-                try:
-                    resume_text = extract_text_from_pdf(path)
-                    resumes_text[filename] = resume_text
-                except Exception as e:
-                    messagebox.showwarning("PDF Error", f"Could not process {filename}.Error: {str(e)}")
 
-        if not resumes_text:
-            messagebox.showinfo("Info", "No resumes found in the folder!")
-            return
+# ================= CORE RANKING ================= #
 
-        documents = [job_description] + list(resumes_text.values())
+def rank_resumes(resume_folder, jd_text):
 
-        vectorizer = TfidfVectorizer(stop_words='english')
-        tfidf_matrix = vectorizer.fit_transform(documents)
+    resumes = {}
+    ignored = []
 
-        similarity_scores = cosine_similarity(tfidf_matrix[0:1],tfidf_matrix[1:]).flatten()
+    for file in os.listdir(resume_folder):
+        if file.endswith(".pdf"):
+            path = os.path.join(resume_folder, file)
+            txt = extract_text_from_pdf(path)
 
-        progress_bar['value'] = 10
-        
-        final_scores = []
-        for idx,(name, content) in enumerate(resumes_text.items()):
-            cleaned_content = clean_text(content)
-            boost = calculate_keyword_boost(cleaned_content)
-            final_score = similarity_scores[idx] + boost
-            final_scores.append((name, final_score))
-            
-            progress = int(((idx+1)/ len(resumes_text))*100)
-            progress_bar['value'] = progress
-            root.update_idletasks()
-    
-        ranked_resumes = sorted(final_scores, key=lambda x: x[1], reverse=True)
+            if len(txt.split()) < MIN_WORDS:
+                ignored.append(file)
+                continue
 
-        output_file = 'ranked_resumes.csv'
+            resumes[file] = txt
 
-        with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(['Rank','Resume Name', 'Similarity Score'])
-            for rank, (name, score) in enumerate(ranked_resumes, 1):
-                writer.writerow([rank, name, f"{score:.4f}"])
+    if not resumes:
+        return None, None, ignored, None
 
-        result_text.delete('1.0', tk.END)
-        result_text.insert(tk.END, "Ranked resumes:\n\n")
-        for rank, (name, score) in enumerate(ranked_resumes, 1):
-            result_text.insert(tk.END, f"{rank}.{name} - Score: {score:.4f}\n")
+    documents = [jd_text] + list(resumes.values())
 
-        progress_bar['value'] = 100
-        root.update_idletasks()
-        
-        messagebox.showinfo("Success", f"Ranking complete! Results saved to '{output_file}'.")
+    vectorizer = TfidfVectorizer(stop_words='english')
+    tfidf = vectorizer.fit_transform(documents)
+
+    similarities = cosine_similarity(tfidf[0:1], tfidf[1:]).flatten()
+
+    results = []
+    all_predictions = []
+    all_true = []
+
+    for i, (name, text) in enumerate(resumes.items()):
+        cleaned = clean_text(text)
+
+        boost, matched_keywords = keyword_boost(cleaned)
+        score = similarities[i] + boost
+
+        results.append((name, score, matched_keywords))
+
+        # ======= Fake labels for evaluation =======
+        # If similarity > threshold -> relevant
+        pred = 1 if score > 0.2 else 0
+        true = 1 if len(matched_keywords) > 2 else 0
+
+        all_predictions.append(pred)
+        all_true.append(true)
+
+    ranked = sorted(results, key=lambda x: x[1], reverse=True)
+
+    report = classification_report(
+        all_true, all_predictions,
+        target_names=["Not Relevant","Relevant"],
+        output_dict=True
+    )
+
+    return ranked, report, ignored, resumes
+
+
+# ================= GUI ================= #
+
+def launch_gui():
 
     root = tk.Tk()
-    root.title("Ranked Resumes")
-    root.geometry("700x600")
-    
-    label = tk.Label(root, text="Welcome to Resume ranker \n Choose a folder to load resumes.",font=("Arial",14))
-    label.pack(pady=20)
+    root.title("AI Resume Ranker")
+    root.geometry("750x650")
 
-    choose_button = tk.Button(root, text="Choose resume folder", font=("Arial", 14), command=choose_resume_folder)
-    choose_button.pack(pady=10)
-    choose_button.config(command=lambda: (choose_resume_folder(), update_button_state(start_button)))
+    selected_folder = None
+    selected_jd = None
 
-    jd_button = tk.Button(root, text="Choose Job Description", font=("Arial", 14), command=choose_jd_file)
-    jd_button.pack(pady=10)
-    jd_button.config(command=lambda: (choose_jd_file(), update_button_state(start_button)))
+    # ---------- FUNCTIONS ---------- #
 
-    progress_label = tk.Label(root, text="Progress: waiting for action", font=("Arial", 14))
-    progress_label.pack(pady=10)
+    def choose_folder():
+        nonlocal selected_folder
+        selected_folder = filedialog.askdirectory()
+        if selected_folder:
+            folder_label.config(text=f"Resumes: {os.path.basename(selected_folder)}")
 
-    start_button = tk.Button(root, text="Start Processing", font=("Arial", 14), command=start_program)
-    start_button.pack(pady=10)
-    
-    result_text = tk.Text(root, height=10, width=60, font=("Courier", 10))
-    result_text.pack(pady=10)
-    result_text.insert(tk.END, "Ranked Resumes: \n")
-    result_text.insert(tk.END, "{:<5} {:<25} {:<15} \n".format("Rank", "Resume Name", "Similarity Score"))
-    result_text.insert(tk.END, "-"*60 + "\n")
+    def choose_jd():
+        nonlocal selected_jd
+        selected_jd = filedialog.askopenfilename(filetypes=[("Text files",".txt")])
+        if selected_jd:
+            jd_label.config(text=f"JD: {os.path.basename(selected_jd)}")
 
-    progress_bar = ttk.Progressbar(root, length=300, mode="determinate", maximum=100, value=0)
-    progress_bar.pack(pady=20)
+    def start():
+
+        if not selected_folder or not selected_jd:
+            messagebox.showwarning("Missing", "Select both resumes and JD")
+            return
+
+        jd_text = read_job_description(selected_jd)
+
+        progress['value'] = 10
+        root.update_idletasks()
+
+        ranked, report, ignored, resumes = rank_resumes(selected_folder, jd_text)
+
+        if ranked is None:
+            messagebox.showerror("Error","No valid resumes found")
+            return
+
+        progress['value'] = 70
+
+        # ---------- SHOW RESULTS ---------- #
+
+        result_box.delete('1.0', tk.END)
+        result_box.insert(tk.END,"===== RANKED RESUMES =====\n\n")
+
+        for i,(name,score,keywords) in enumerate(ranked,1):
+            result_box.insert(tk.END,
+                f"{i}. {name}\n"
+                f"   Score: {score:.3f}\n"
+                f"   Matched Skills: {', '.join(keywords) if keywords else 'None'}\n\n"
+            )
+
+        # ---------- SHOW METRICS ---------- #
+
+        result_box.insert(tk.END,"\n===== MODEL METRICS =====\n")
+
+        for label,data in report.items():
+            if label in ["Relevant","Not Relevant"]:
+                result_box.insert(tk.END,
+                    f"\n{label}:\n"
+                    f"Precision: {data['precision']:.2f}\n"
+                    f"Recall: {data['recall']:.2f}\n"
+                    f"F1-score: {data['f1-score']:.2f}\n"
+                    f"Support: {data['support']}\n"
+                )
+
+        # ---------- SAVE CSV ---------- #
+
+        with open("ranked_resumes.csv","w",newline="",encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Rank","Resume","Score"])
+            for i,(name,score,_) in enumerate(ranked,1):
+                writer.writerow([i,name,f"{score:.3f}"])
+
+        progress['value'] = 100
+        messagebox.showinfo("Done","Ranking complete. CSV saved.")
+
+    # ---------- UI ---------- #
+
+    tk.Label(root,text="AI Resume Ranking System",font=("Arial",18,"bold")).pack(pady=15)
+
+    tk.Button(root,text="Select Resume Folder",font=("Arial",12),command=choose_folder).pack(pady=5)
+    folder_label = tk.Label(root,text="No folder selected")
+    folder_label.pack()
+
+    tk.Button(root,text="Select Job Description",font=("Arial",12),command=choose_jd).pack(pady=5)
+    jd_label = tk.Label(root,text="No JD selected")
+    jd_label.pack()
+
+    tk.Button(root,text="Start Ranking",font=("Arial",14,"bold"),bg="#4CAF50",fg="white",command=start).pack(pady=15)
+
+    progress = ttk.Progressbar(root,length=400,mode="determinate")
+    progress.pack(pady=10)
+
+    result_box = tk.Text(root,height=20,width=85,font=("Courier",10))
+    result_box.pack(pady=10)
 
     root.mainloop()
-        
-display_ranked_resumes()
+
+
+# ================= RUN ================= #
+
+launch_gui()

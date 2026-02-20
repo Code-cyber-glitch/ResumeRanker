@@ -1,1 +1,55 @@
-We are looking for a Python developer with knowledge of machine learning, Django, and REST APIs.
+Data Scientist – AI & Analytics Team
+
+We are looking for a passionate Data Scientist to join our growing AI & Analytics team. The ideal candidate will turn complex data into actionable insights, build predictive models, and contribute to intelligent decision-making across the organization.
+
+Key Responsibilities
+
+Analyze structured and unstructured datasets to uncover patterns and trends
+
+Build and deploy machine learning models for prediction, classification, and recommendation tasks
+
+Perform data cleaning, feature engineering, and exploratory data analysis (EDA)
+
+Work with stakeholders to translate business problems into data science solutions
+
+Develop dashboards and visualizations to communicate insights clearly
+
+Optimize model performance and ensure scalability in production environments
+
+Required Skills
+
+Strong programming skills in Python or R
+
+Experience with Machine Learning, NLP, or Deep Learning techniques
+
+Hands-on knowledge of libraries such as Pandas, NumPy, Scikit-learn, TensorFlow, or PyTorch
+
+Proficiency in SQL and data querying
+
+Understanding of statistics, probability, and model evaluation metrics
+
+Experience with data visualization tools like Matplotlib, Seaborn, or Tableau
+
+Preferred Qualifications
+
+Experience working with real-world datasets and messy data
+
+Knowledge of cloud platforms (AWS / GCP / Azure)
+
+Familiarity with Git, Docker, or MLOps workflows
+
+Prior internship/project experience in data science or analytics
+
+Education
+
+Bachelor’s degree in Computer Science, Data Science, Statistics, or related field.
+
+What We Offer
+
+Opportunity to work on real AI-driven products
+
+Exposure to production-level machine learning systems
+
+Collaborative and fast-growing tech environment
+
+Learning budget and mentorship from senior data scientists
