@@ -203,16 +203,8 @@ These resumes are used solely to demonstrate the functionality of the resume ran
 
 If you plan to reuse the dataset, please refer to the original Kaggle dataset license and attribution guidelines.
 
----
-
-## 🚀 Future Improvements
-
-* Deep learning embedding models (BERT / Sentence Transformers)
-* Skill extraction using Named Entity Recognition
-* Web interface for recruiters
-* Resume summarization
-* Experience weighting system
-* Job role recommendation engine
+Dataset source:
+🔗https://www.kaggle.com/datasets/hadikp/resume-data-pdf
 
 ---
 
